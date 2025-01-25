@@ -83,8 +83,8 @@ class GameView @JvmOverloads constructor(
             
             // Adjust control button position
             val buttonRadius = height / 5f
-            val margin = buttonRadius * 0.2f  // Reduce margin to 20% of button radius
-            val buttonX = width - (buttonRadius + margin)  // Position from right edge
+            val margin = buttonRadius * 0.2f  // Small margin of 20% of button radius
+            val buttonX = buttonRadius + margin  // Position from left edge
             val buttonY = height - (buttonRadius + margin)  // Position from bottom edge
             controlButton = ControlButton(buttonX, buttonY, buttonRadius)
             
