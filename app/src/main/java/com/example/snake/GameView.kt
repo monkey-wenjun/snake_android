@@ -81,9 +81,11 @@ class GameView @JvmOverloads constructor(
         if (!::snake.isInitialized) {
             snake = Snake(width / 2f, height / 2f, width.toFloat(), height.toFloat(), SEGMENT_SIZE)
             
+            // Adjust control button position
             val buttonRadius = height / 5f
-            val buttonX = width * 0.08f
-            val buttonY = height * 0.75f
+            val margin = buttonRadius * 0.2f  // Reduce margin to 20% of button radius
+            val buttonX = width - (buttonRadius + margin)  // Position from right edge
+            val buttonY = height - (buttonRadius + margin)  // Position from bottom edge
             controlButton = ControlButton(buttonX, buttonY, buttonRadius)
             
             initializeFood()
