@@ -22,8 +22,8 @@ class GameView @JvmOverloads constructor(
     companion object {
         private const val TAG = "GameView"
         private const val FOOD_COUNT = 8
-        private const val MIN_FOOD_DISTANCE = 150f  // Increased minimum distance
-        private const val SEGMENT_SIZE = 80f  // Increased snake and food size
+        private const val MIN_FOOD_DISTANCE = 150f
+        private const val SEGMENT_SIZE = 80f
     }
 
     private var thread: GameThread? = null
@@ -32,48 +32,69 @@ class GameView @JvmOverloads constructor(
     private lateinit var controlButton: ControlButton
     private var score = 0
     private val soundManager = SoundManager(context)
+    private var isGamePaused = false
     
     private val scorePaint = Paint().apply {
         color = Color.WHITE
-        textSize = 100f  // Increased score text size
+        textSize = 100f
         textAlign = Paint.Align.RIGHT
     }
 
     init {
         holder.addCallback(this)
-        
-        // Set window to full screen
-        val window = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        val display = window.defaultDisplay
-        val metrics = context.resources.displayMetrics
-        display.getRealMetrics(metrics)
-        
         isFocusable = true
         isClickable = true
         isFocusableInTouchMode = true
         setBackgroundColor(Color.BLACK)
     }
 
+    fun pauseGame() {
+        Log.d(TAG, "Pausing game")
+        isGamePaused = true
+        thread?.let { currentThread ->
+            currentThread.setRunning(false)
+            try {
+                currentThread.join(50)
+                thread = null
+            } catch (e: Exception) {
+                Log.e(TAG, "Error pausing game: ${e.message}")
+            }
+        }
+    }
+
+    fun resumeGame() {
+        Log.d(TAG, "Resuming game")
+        if (holder.surface?.isValid == true && isGamePaused) {
+            isGamePaused = false
+            thread?.setRunning(false)
+            thread = GameThread(holder, this).apply {
+                setRunning(true)
+                start()
+            }
+        }
+    }
+
     override fun surfaceCreated(holder: SurfaceHolder) {
         Log.d(TAG, "Surface created: width=$width, height=$height")
         
-        // Initialize snake with screen dimensions and larger size
-        snake = Snake(width / 2f, height / 2f, width.toFloat(), height.toFloat(), SEGMENT_SIZE)
+        // Initialize game objects if not already initialized
+        if (!::snake.isInitialized) {
+            snake = Snake(width / 2f, height / 2f, width.toFloat(), height.toFloat(), SEGMENT_SIZE)
+            
+            val buttonRadius = height / 5f
+            val buttonX = width * 0.08f
+            val buttonY = height * 0.75f
+            controlButton = ControlButton(buttonX, buttonY, buttonRadius)
+            
+            initializeFood()
+        }
         
-        // Initialize control button
-        val buttonRadius = height / 5f  // Keep current size
-        val buttonX = width * 0.08f     // Move closer to left edge
-        val buttonY = height * 0.75f    // Move closer to bottom
-        
-        controlButton = ControlButton(buttonX, buttonY, buttonRadius)
-        
-        // Initialize food items
-        initializeFood()
-        
-        // Create new thread
-        thread = GameThread(holder, this).apply {
-            setRunning(true)
-            start()
+        // Start game thread if not paused
+        if (!isGamePaused && thread == null) {
+            thread = GameThread(holder, this).apply {
+                setRunning(true)
+                start()
+            }
         }
     }
 
@@ -129,42 +150,47 @@ class GameView @JvmOverloads constructor(
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
         Log.d(TAG, "Surface destroyed")
-        var retry = true
-        thread?.let { currentThread ->
-            currentThread.setRunning(false)
-            while (retry) {
-                try {
-                    currentThread.join(500) // Wait up to 500ms
-                    retry = false
-                    thread = null
-                } catch (e: InterruptedException) {
-                    Log.e(TAG, "Error stopping game thread: ${e.message}")
-                }
-            }
-        }
-        try {
-            soundManager.release()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error releasing sound manager: ${e.message}")
-        }
+        cleanupThread()
     }
 
     override fun onDetachedFromWindow() {
-        super.onDetachedFromWindow()
         Log.d(TAG, "Detached from window")
-        thread?.let { currentThread ->
-            currentThread.setRunning(false)
+        super.onDetachedFromWindow()
+        cleanup()
+    }
+
+    private fun cleanupThread() {
+        var retry = true
+        var attempts = 0
+        
+        while (retry && attempts < 5) {  // Reduced max attempts and timeout
             try {
-                currentThread.join(500) // Wait up to 500ms
+                thread?.let { currentThread ->
+                    currentThread.setRunning(false)
+                    currentThread.interrupt()  // Force interrupt the thread
+                    currentThread.join(25)  // Reduced timeout
+                }
+                retry = false
                 thread = null
-            } catch (e: InterruptedException) {
-                Log.e(TAG, "Error stopping game thread on detach: ${e.message}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error cleaning up thread (attempt ${attempts + 1}): ${e.message}")
+                attempts++
             }
         }
+    }
+
+    fun cleanup() {
+        Log.d(TAG, "Cleaning up GameView resources")
         try {
-            soundManager.release()
+            isGamePaused = true  // Prevent thread restart
+            cleanupThread()
+            try {
+                soundManager.release()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error releasing sound manager: ${e.message}")
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "Error releasing sound manager on detach: ${e.message}")
+            Log.e(TAG, "Error during cleanup: ${e.message}")
         }
     }
 
