@@ -11,17 +11,12 @@ class GameThread(
     
     companion object {
         private const val TAG = "GameThread"
-        private const val TARGET_FPS = 60  // Keep rendering at 60 FPS for smooth graphics
-        private const val UPDATE_FPS = 15  // But update game logic at 15 FPS for slower movement
-        private const val MAX_FRAME_SKIPS = 5
-        private const val FRAME_PERIOD = (1000.0 / TARGET_FPS).toLong()
-        private const val UPDATE_PERIOD = (1000.0 / UPDATE_FPS).toLong()
+        private const val TARGET_FPS = 60
+        private const val TARGET_FRAME_TIME = (1000000000L / TARGET_FPS)  // in nanoseconds
     }
     
     @Volatile
     private var running = false
-    private var lastTime = System.nanoTime()
-    private var lastUpdateTime = System.nanoTime()
     
     fun setRunning(isRunning: Boolean) {
         running = isRunning
@@ -32,31 +27,23 @@ class GameThread(
     
     override fun run() {
         var canvas: Canvas? = null
-        var frameSkips = 0
+        var lastTime = System.nanoTime()
+        var currentTime: Long
+        var deltaTime: Long
         
         while (running && !isInterrupted) {
-            val currentTime = System.nanoTime()
-            val deltaTime = (currentTime - lastTime) / 1_000_000L // Convert to milliseconds
-            val updateDeltaTime = (currentTime - lastUpdateTime) / 1_000_000L
-            
             try {
                 canvas = surfaceHolder.lockCanvas()
                 synchronized(surfaceHolder) {
-                    if (canvas != null) {
-                        // Update game logic at a slower rate
-                        if (updateDeltaTime >= UPDATE_PERIOD) {
-                            gameView.update()
-                            lastUpdateTime = currentTime
-                        }
-                        
-                        // Render at full frame rate
-                        if (deltaTime >= FRAME_PERIOD || frameSkips >= MAX_FRAME_SKIPS) {
+                    currentTime = System.nanoTime()
+                    deltaTime = currentTime - lastTime
+                    
+                    if (deltaTime >= TARGET_FRAME_TIME) {
+                        gameView.update()
+                        if (canvas != null) {
                             gameView.draw(canvas)
-                            frameSkips = 0
-                            lastTime = currentTime
-                        } else {
-                            frameSkips++
                         }
+                        lastTime = currentTime
                     }
                 }
             } catch (e: Exception) {
@@ -71,7 +58,8 @@ class GameThread(
                 }
             }
             
-            val sleepTime = FRAME_PERIOD - deltaTime
+            // Calculate sleep time to maintain target FPS
+            val sleepTime = (TARGET_FRAME_TIME - (System.nanoTime() - lastTime)) / 1000000L
             if (sleepTime > 0) {
                 try {
                     sleep(sleepTime)

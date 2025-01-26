@@ -22,7 +22,7 @@ class Snake(
     private val segments = CopyOnWriteArrayList<PointF>()
     private var direction = Direction.RIGHT
     private var nextDirection = direction
-    private val speed = segmentSize * 0.25f
+    private val speed = segmentSize * 0.15f
     private val color = Color.rgb(
         Random.nextInt(128, 256),
         Random.nextInt(128, 256),
@@ -93,21 +93,27 @@ class Snake(
             Direction.RIGHT -> newHead.x += speed
         }
 
-        // Wrap around screen edges
+        // Wrap around screen edges smoothly
         when {
-            newHead.x < 0 -> newHead.x = screenWidth
-            newHead.x > screenWidth -> newHead.x = 0f
-            newHead.y < 0 -> newHead.y = screenHeight
-            newHead.y > screenHeight -> newHead.y = 0f
+            newHead.x < -segmentSize -> newHead.x = screenWidth + segmentSize
+            newHead.x > screenWidth + segmentSize -> newHead.x = -segmentSize
+            newHead.y < -segmentSize -> newHead.y = screenHeight + segmentSize
+            newHead.y > screenHeight + segmentSize -> newHead.y = -segmentSize
         }
 
-        // Check if the snake has actually moved
+        // Only update position if moved significantly
         val dx = abs(newHead.x - lastPosition.x)
         val dy = abs(newHead.y - lastPosition.y)
-        hasMoved = (dx > 0.1f || dy > 0.1f)  // More sensitive movement detection
+        hasMoved = (dx > 0.1f || dy > 0.1f)
 
-        segments.add(0, newHead)
-        segments.removeAt(segments.size - 1)
+        if (hasMoved) {
+            // Add new head
+            segments.add(0, newHead)
+            // Remove tail
+            if (segments.size > 1) {
+                segments.removeAt(segments.size - 1)
+            }
+        }
     }
 
     fun hasMovedSinceLastCheck(): Boolean {
