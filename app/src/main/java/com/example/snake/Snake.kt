@@ -70,7 +70,13 @@ class Snake(
         }
     }
 
-    fun setDirection(newDirection: Direction) {
+    fun setDirection(newDirection: Direction?) {
+        if (newDirection == null) {
+            // When direction is null, maintain current direction
+            nextDirection = direction
+            return
+        }
+        
         when (newDirection) {
             Direction.UP -> if (direction != Direction.DOWN) nextDirection = newDirection
             Direction.DOWN -> if (direction != Direction.UP) nextDirection = newDirection

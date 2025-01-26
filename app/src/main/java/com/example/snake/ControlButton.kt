@@ -4,9 +4,7 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Color
 import android.util.Log
-import kotlin.math.abs
 import kotlin.math.atan2
-import kotlin.math.PI
 import kotlin.math.sqrt
 
 class ControlButton(private val x: Float, private val y: Float, private val radius: Float) {
@@ -17,43 +15,54 @@ class ControlButton(private val x: Float, private val y: Float, private val radi
     private val paint = Paint().apply {
         color = Color.GRAY
         style = Paint.Style.FILL
-        alpha = 60  // More transparent
+        alpha = 128
+        isAntiAlias = true
     }
 
     private val borderPaint = Paint().apply {
         color = Color.WHITE
         style = Paint.Style.STROKE
-        strokeWidth = 3f  // Even thinner border
-        alpha = 80  // More transparent border
+        strokeWidth = 3f
+        alpha = 80
     }
 
     private val arrowPaint = Paint().apply {
         color = Color.WHITE
         style = Paint.Style.FILL
-        strokeWidth = 3f  // Even thinner arrows
-        alpha = 120  // More transparent arrows
+        strokeWidth = 3f
+        alpha = 120
+    }
+
+    private var snake: Snake? = null
+
+    fun setSnake(snake: Snake) {
+        this.snake = snake
+        Log.d(TAG, "Snake reference set: $snake")
+    }
+
+    fun resetDirection() {
+        snake?.setDirection(null)
+        Log.d(TAG, "Direction reset")
     }
 
     fun draw(canvas: Canvas) {
-        // Draw main circle
-        canvas.drawCircle(x, y, radius, paint)
-        canvas.drawCircle(x, y, radius, borderPaint)
+        try {
+            // Draw main circle
+            canvas.drawCircle(x, y, radius, paint)
+            canvas.drawCircle(x, y, radius, borderPaint)
 
-        // Draw direction arrows
-        val arrowSize = radius * 0.3f  // Smaller arrows
-        val arrowDist = radius * 0.5f  // Arrows closer to center
-        
-        // Up arrow
-        canvas.drawPath(createArrowPath(x, y - arrowDist, arrowSize, Direction.UP), arrowPaint)
-        
-        // Down arrow
-        canvas.drawPath(createArrowPath(x, y + arrowDist, arrowSize, Direction.DOWN), arrowPaint)
-        
-        // Left arrow
-        canvas.drawPath(createArrowPath(x - arrowDist, y, arrowSize, Direction.LEFT), arrowPaint)
-        
-        // Right arrow
-        canvas.drawPath(createArrowPath(x + arrowDist, y, arrowSize, Direction.RIGHT), arrowPaint)
+            // Draw direction arrows
+            val arrowSize = radius * 0.3f
+            val arrowDist = radius * 0.5f
+            
+            // Draw arrows in all four directions
+            canvas.drawPath(createArrowPath(x, y - arrowDist, arrowSize, Direction.UP), arrowPaint)
+            canvas.drawPath(createArrowPath(x, y + arrowDist, arrowSize, Direction.DOWN), arrowPaint)
+            canvas.drawPath(createArrowPath(x - arrowDist, y, arrowSize, Direction.LEFT), arrowPaint)
+            canvas.drawPath(createArrowPath(x + arrowDist, y, arrowSize, Direction.RIGHT), arrowPaint)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error drawing control button: ${e.message}", e)
+        }
     }
 
     private fun createArrowPath(centerX: Float, centerY: Float, size: Float, direction: Direction): android.graphics.Path {
@@ -85,26 +94,40 @@ class ControlButton(private val x: Float, private val y: Float, private val radi
         return path
     }
 
-    fun isPressed(touchX: Float, touchY: Float): Boolean {
-        val distance = sqrt((touchX - x) * (touchX - x) + (touchY - y) * (touchY - y))
-        val isPressed = distance <= radius * 1.2f  // Slightly reduced touch area
-        Log.d(TAG, "isPressed: touch=($touchX, $touchY), distance=$distance, radius=$radius, result=$isPressed")
-        return isPressed
+    fun updateDirection(touchX: Float, touchY: Float) {
+        if (!isPressed(touchX, touchY)) {
+            return
+        }
+
+        try {
+            // Calculate angle between touch point and button center
+            val dx = touchX - x
+            val dy = touchY - y
+            val angle = Math.toDegrees(atan2(dy.toDouble(), dx.toDouble())).toFloat()
+            
+            // Determine direction based on angle
+            val direction = when {
+                angle in -45.0..45.0 -> Direction.RIGHT
+                angle in 45.0..135.0 -> Direction.DOWN
+                angle in -135.0..-45.0 -> Direction.UP
+                else -> Direction.LEFT
+            }
+
+            Log.d(TAG, "Setting direction: $direction, angle: $angle")
+            snake?.setDirection(direction)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error updating direction: ${e.message}", e)
+        }
     }
 
-    fun isInDirection(touchX: Float, touchY: Float, direction: Direction): Boolean {
+    fun isPressed(touchX: Float, touchY: Float): Boolean {
         val dx = touchX - x
         val dy = touchY - y
-        
-        // Simple direction detection based on relative position
-        val result = when (direction) {
-            Direction.UP -> dy < 0 && abs(dy) > abs(dx)
-            Direction.DOWN -> dy > 0 && abs(dy) > abs(dx)
-            Direction.LEFT -> dx < 0 && abs(dx) > abs(dy)
-            Direction.RIGHT -> dx > 0 && abs(dx) > abs(dy)
+        val distance = sqrt(dx * dx + dy * dy)
+        val result = distance <= radius * 1.2f  // Slightly larger touch area
+        if (result) {
+            Log.d(TAG, "Button pressed at ($touchX, $touchY)")
         }
-        
-        Log.d(TAG, "isInDirection: dir=$direction, dx=$dx, dy=$dy, result=$result")
         return result
     }
 } 

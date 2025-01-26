@@ -33,6 +33,8 @@ class GameView @JvmOverloads constructor(
     private var score = 0
     private val soundManager = SoundManager(context)
     private var isGamePaused = false
+    private var gameStartTime = System.currentTimeMillis()
+    private var lastDrawTime = 0L
     
     private val scorePaint = Paint().apply {
         color = Color.WHITE
@@ -40,12 +42,23 @@ class GameView @JvmOverloads constructor(
         textAlign = Paint.Align.RIGHT
     }
 
+    private val timePaint = Paint().apply {
+        color = Color.WHITE
+        textSize = 50f
+        textAlign = Paint.Align.CENTER
+    }
+
     init {
-        holder.addCallback(this)
-        isFocusable = true
-        isClickable = true
-        isFocusableInTouchMode = true
-        setBackgroundColor(Color.BLACK)
+        try {
+            holder.addCallback(this)
+            isFocusable = true
+            isClickable = true
+            isFocusableInTouchMode = true
+            setBackgroundColor(Color.BLACK)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in init: ${e.message}")
+            e.printStackTrace()
+        }
     }
 
     fun pauseGame() {
@@ -56,7 +69,8 @@ class GameView @JvmOverloads constructor(
 
     fun resumeGame() {
         Log.d(TAG, "Resuming game")
-        if (!isGamePaused && holder.surface?.isValid == true) {
+        isGamePaused = false
+        if (holder.surface?.isValid == true) {
             startNewThread()
         }
     }
@@ -73,22 +87,29 @@ class GameView @JvmOverloads constructor(
     override fun surfaceCreated(holder: SurfaceHolder) {
         Log.d(TAG, "Surface created: width=$width, height=$height")
         
-        // Initialize game objects if not already initialized
-        if (!::snake.isInitialized) {
-            snake = Snake(width / 2f, height / 2f, width.toFloat(), height.toFloat(), SEGMENT_SIZE)
+        try {
+            // Initialize game objects if not already initialized
+            if (!::snake.isInitialized) {
+                snake = Snake(width / 2f, height / 2f, width.toFloat(), height.toFloat(), SEGMENT_SIZE)
+                
+                // Initialize control button
+                val buttonRadius = height / 5f
+                val margin = buttonRadius * 0.2f
+                val buttonX = buttonRadius + margin
+                val buttonY = height - (buttonRadius + margin)
+                controlButton = ControlButton(buttonX, buttonY, buttonRadius)
+                controlButton.setSnake(snake)
+                
+                initializeFood()
+                
+                // Reset game start time when initializing new game
+                gameStartTime = System.currentTimeMillis()
+            }
             
-            // Adjust control button position
-            val buttonRadius = height / 5f
-            val margin = buttonRadius * 0.2f
-            val buttonX = buttonRadius + margin
-            val buttonY = height - (buttonRadius + margin)
-            controlButton = ControlButton(buttonX, buttonY, buttonRadius)
-            
-            initializeFood()
+            resumeGame()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in surfaceCreated: ${e.message}", e)
         }
-        
-        isGamePaused = false
-        startNewThread()
     }
 
     private fun initializeFood() {
@@ -157,28 +178,30 @@ class GameView @JvmOverloads constructor(
         thread?.let { currentThread ->
             try {
                 currentThread.setRunning(false)
-                currentThread.interrupt()
                 
                 // Wait for the thread to die with timeout
                 var retry = true
                 var timeoutCount = 0
                 while (retry && timeoutCount < 3) {
                     try {
-                        currentThread.join(100)  // Wait up to 100ms
+                        currentThread.join(200)  // Increased timeout to 200ms
                         retry = false
                     } catch (e: InterruptedException) {
                         timeoutCount++
+                        Log.w(TAG, "Thread join interrupted, attempt $timeoutCount")
                     }
                 }
                 
-                // Log warning if cleanup timed out
                 if (retry) {
-                    Log.w(TAG, "Thread cleanup timed out")
+                    Log.w(TAG, "Thread cleanup timed out after $timeoutCount attempts")
+                    // Force interrupt if join failed
+                    currentThread.interrupt()
                 } else {
                     Log.d(TAG, "Thread cleanup completed successfully")
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error cleaning up thread: ${e.message}")
+                e.printStackTrace()
             } finally {
                 thread = null
             }
@@ -197,26 +220,41 @@ class GameView @JvmOverloads constructor(
     }
 
     fun update() {
-        // Only move and check collisions if not paused
-        if (!isGamePaused) {
-            // Store previous position to check if actually moved
-            val prevHead = snake.getSegments().firstOrNull()?.let { PointF(it.x, it.y) }
-            
-            snake.move()
-            
-            // Only check collisions if snake actually moved
-            val currentHead = snake.getSegments().firstOrNull()
-            if (prevHead != null && currentHead != null &&
-                (prevHead.x != currentHead.x || prevHead.y != currentHead.y)) {
-                checkCollisions()
-            }
-            
-            // Respawn food if there are too few
-            while (foodItems.size < FOOD_COUNT) {
-                val food = Food(width, height, SEGMENT_SIZE)
-                if (isValidFoodPosition(food)) {
-                    foodItems.add(food)
+        if (isGamePaused) {
+            return
+        }
+
+        try {
+            synchronized(this) {
+                // Store previous position to check if actually moved
+                val prevHead = snake.getSegments().firstOrNull()?.let { PointF(it.x, it.y) }
+                
+                snake.move()
+                
+                // Only check collisions if snake actually moved
+                val currentHead = snake.getSegments().firstOrNull()
+                if (prevHead != null && currentHead != null &&
+                    (prevHead.x != currentHead.x || prevHead.y != currentHead.y)) {
+                    checkCollisions()
                 }
+                
+                // Respawn food if there are too few
+                while (foodItems.size < FOOD_COUNT) {
+                    val food = Food(width, height, SEGMENT_SIZE)
+                    if (isValidFoodPosition(food)) {
+                        foodItems.add(food)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in update: ${e.message}")
+            e.printStackTrace()
+            // Try to recover by pausing the game
+            try {
+                pauseGame()
+            } catch (e2: Exception) {
+                Log.e(TAG, "Error while trying to pause game after error: ${e2.message}")
+                e2.printStackTrace()
             }
         }
     }
@@ -246,15 +284,34 @@ class GameView @JvmOverloads constructor(
     }
 
     override fun draw(canvas: Canvas) {
-        super.draw(canvas)
-        
-        // Draw game objects
-        snake.draw(canvas)
-        foodItems.forEach { it.draw(canvas) }
-        controlButton.draw(canvas)
-        
-        // Draw score in top-right corner with new text
-        canvas.drawText("当前积分: $score", width - 20f, 60f, scorePaint)
+        if (canvas == null) {
+            Log.e(TAG, "Canvas is null in draw")
+            return
+        }
+
+        try {
+            super.draw(canvas)
+            
+            // Draw game objects
+            synchronized(this) {
+                snake.draw(canvas)
+                foodItems.forEach { it.draw(canvas) }
+                controlButton.draw(canvas)
+                
+                // Draw score in top-right corner
+                canvas.drawText("当前积分: $score", width - 20f, 60f, scorePaint)
+
+                // Draw game time in top-center
+                val gameTimeSeconds = ((System.currentTimeMillis() - gameStartTime) / 1000).toInt()
+                val minutes = gameTimeSeconds / 60
+                val seconds = gameTimeSeconds % 60
+                val timeText = String.format("游戏时间: %02d:%02d", minutes, seconds)
+                canvas.drawText(timeText, width / 2f, 60f, timePaint)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in draw: ${e.message}")
+            e.printStackTrace()
+        }
     }
 
     private fun checkCollisions() {
@@ -285,30 +342,30 @@ class GameView @JvmOverloads constructor(
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        Log.d(TAG, "Touch event: ${event.action}, at (${event.x}, ${event.y})")
-        
-        when (event.action) {
-            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
-                val x = event.x
-                val y = event.y
-                
-                if (controlButton.isPressed(x, y)) {
-                    Log.d(TAG, "Control button pressed at ($x, $y)")
-                    
-                    // Try each direction in sequence
-                    val directions = listOf(Direction.UP, Direction.DOWN, Direction.LEFT, Direction.RIGHT)
-                    for (dir in directions) {
-                        if (controlButton.isInDirection(x, y, dir)) {
-                            Log.d(TAG, "Setting direction to $dir")
-                            snake.setDirection(dir)
-                            invalidate()
-                            return true
-                        }
+        if (isGamePaused) {
+            return false
+        }
+
+        try {
+            synchronized(this) {
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+                        controlButton.updateDirection(event.x, event.y)
+                        postInvalidate()  // Use postInvalidate for thread safety
+                        return true
                     }
+                    MotionEvent.ACTION_UP -> {
+                        controlButton.resetDirection()
+                        postInvalidate()
+                        return true
+                    }
+                    else -> return super.onTouchEvent(event)
                 }
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error handling touch event: ${e.message}")
+            e.printStackTrace()
         }
-        
-        return true
+        return super.onTouchEvent(event)
     }
 } 

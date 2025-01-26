@@ -26,40 +26,51 @@ class GameThread(
     }
     
     override fun run() {
-        var canvas: Canvas? = null
         var lastTime = System.nanoTime()
         var currentTime: Long
         var deltaTime: Long
+        var frameCount = 0
+        var lastFPSTime = lastTime
         
         while (running && !isInterrupted) {
-            try {
-                canvas = surfaceHolder.lockCanvas()
-                synchronized(surfaceHolder) {
-                    currentTime = System.nanoTime()
-                    deltaTime = currentTime - lastTime
-                    
-                    if (deltaTime >= TARGET_FRAME_TIME) {
+            currentTime = System.nanoTime()
+            deltaTime = currentTime - lastTime
+            
+            if (deltaTime >= TARGET_FRAME_TIME) {
+                var canvas: Canvas? = null
+                try {
+                    canvas = surfaceHolder.lockCanvas()
+                    synchronized(surfaceHolder) {
                         gameView.update()
                         if (canvas != null) {
                             gameView.draw(canvas)
                         }
-                        lastTime = currentTime
                     }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error in game loop: ${e.message}")
-                running = false
-            } finally {
-                try {
-                    canvas?.let { surfaceHolder.unlockCanvasAndPost(it) }
+                    
+                    // FPS calculation
+                    frameCount++
+                    if (currentTime - lastFPSTime >= 1000000000L) {  // Every second
+                        Log.d(TAG, "FPS: $frameCount")
+                        frameCount = 0
+                        lastFPSTime = currentTime
+                    }
+                    
+                    lastTime = currentTime
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error posting canvas: ${e.message}")
+                    Log.e(TAG, "Error in game loop: ${e.message}")
                     running = false
+                } finally {
+                    try {
+                        canvas?.let { surfaceHolder.unlockCanvasAndPost(it) }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error posting canvas: ${e.message}")
+                        running = false
+                    }
                 }
             }
             
-            // Calculate sleep time to maintain target FPS
-            val sleepTime = (TARGET_FRAME_TIME - (System.nanoTime() - lastTime)) / 1000000L
+            // Sleep to save CPU
+            val sleepTime = (TARGET_FRAME_TIME - (System.nanoTime() - currentTime)) / 1000000L
             if (sleepTime > 0) {
                 try {
                     sleep(sleepTime)
