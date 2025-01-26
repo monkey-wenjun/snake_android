@@ -47,6 +47,9 @@ class Snake(
         isAntiAlias = true
     }
 
+    private var lastPosition = PointF(0f, 0f)
+    private var hasMoved = false
+
     init {
         setStartPosition(startX, startY)
     }
@@ -71,7 +74,9 @@ class Snake(
         direction = nextDirection
         val head = segments.first()
         val newHead = PointF(head.x, head.y)
+        lastPosition.set(head.x, head.y)
 
+        // Calculate new position
         when (direction) {
             Direction.UP -> newHead.y -= speed
             Direction.DOWN -> newHead.y += speed
@@ -79,13 +84,27 @@ class Snake(
             Direction.RIGHT -> newHead.x += speed
         }
 
-        if (newHead.x < 0) newHead.x = screenWidth
-        if (newHead.x > screenWidth) newHead.x = 0f
-        if (newHead.y < 0) newHead.y = screenHeight
-        if (newHead.y > screenHeight) newHead.y = 0f
+        // Wrap around screen edges
+        when {
+            newHead.x < 0 -> newHead.x = screenWidth
+            newHead.x > screenWidth -> newHead.x = 0f
+            newHead.y < 0 -> newHead.y = screenHeight
+            newHead.y > screenHeight -> newHead.y = 0f
+        }
+
+        // Check if the snake has actually moved
+        val dx = abs(newHead.x - lastPosition.x)
+        val dy = abs(newHead.y - lastPosition.y)
+        hasMoved = (dx > 0.1f || dy > 0.1f)  // More sensitive movement detection
 
         segments.add(0, newHead)
         segments.removeAt(segments.size - 1)
+    }
+
+    fun hasMovedSinceLastCheck(): Boolean {
+        val moved = hasMoved
+        hasMoved = false
+        return moved
     }
 
     fun grow() {
@@ -195,11 +214,13 @@ class Snake(
 
     fun checkFoodCollision(food: Food): Boolean {
         val head = segments.first()
-        val distance = sqrt(
-            (head.x - food.x) * (head.x - food.x) +
-            (head.y - food.y) * (head.y - food.y)
-        )
-        return distance < (segmentSize + food.size) * 0.6f
+        val dx = head.x - food.x
+        val dy = head.y - food.y
+        val distance = sqrt(dx * dx + dy * dy)
+        
+        // Less strict collision detection
+        val collisionThreshold = (segmentSize + food.size) * 0.5f
+        return distance < collisionThreshold
     }
 
     fun getSegments(): List<PointF> = segments.toList() // Return a copy of the segments list

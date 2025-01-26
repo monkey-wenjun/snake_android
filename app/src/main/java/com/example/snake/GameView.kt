@@ -246,23 +246,33 @@ class GameView @JvmOverloads constructor(
     }
 
     private fun checkCollisions() {
+        // Only check food collisions if snake is actually moving
+        if (!snake.hasMovedSinceLastCheck()) {
+            return
+        }
+        
         // Check food collisions
         val iterator = foodItems.iterator()
         while (iterator.hasNext()) {
             val food = iterator.next()
             if (snake.checkFoodCollision(food)) {
-                // Play sound for the character
-                soundManager.playSound(food.character)
-                
-                // Add score
+                // Add score first
                 score += when (food.character) {
                     in 'A'..'Z' -> 30
                     in 'a'..'z' -> 20
                     in '0'..'9' -> 10
                     else -> 0
                 }
+                
+                // Then grow the snake
                 snake.grow()
+                
+                // Play sound only when actually colliding with food
+                soundManager.playSound(food.character)
+                
+                // Remove the food
                 iterator.remove()
+                break  // Only handle one collision per update
             }
         }
     }
