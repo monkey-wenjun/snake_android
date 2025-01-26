@@ -36,7 +36,7 @@ class GameView @JvmOverloads constructor(
     
     private val scorePaint = Paint().apply {
         color = Color.WHITE
-        textSize = 100f
+        textSize = 50f
         textAlign = Paint.Align.RIGHT
     }
 
@@ -51,22 +51,13 @@ class GameView @JvmOverloads constructor(
     fun pauseGame() {
         Log.d(TAG, "Pausing game")
         isGamePaused = true
-        thread?.let { currentThread ->
-            currentThread.setRunning(false)
-            try {
-                currentThread.join(50)
-                thread = null
-            } catch (e: Exception) {
-                Log.e(TAG, "Error pausing game: ${e.message}")
-            }
-        }
+        cleanupThread()
     }
 
     fun resumeGame() {
         Log.d(TAG, "Resuming game")
-        if (holder.surface?.isValid == true && isGamePaused) {
+        if (holder.surface?.isValid == true) {
             isGamePaused = false
-            thread?.setRunning(false)
             thread = GameThread(holder, this).apply {
                 setRunning(true)
                 start()
@@ -83,20 +74,17 @@ class GameView @JvmOverloads constructor(
             
             // Adjust control button position
             val buttonRadius = height / 5f
-            val margin = buttonRadius * 0.2f  // Small margin of 20% of button radius
-            val buttonX = buttonRadius + margin  // Position from left edge
-            val buttonY = height - (buttonRadius + margin)  // Position from bottom edge
+            val margin = buttonRadius * 0.2f
+            val buttonX = buttonRadius + margin
+            val buttonY = height - (buttonRadius + margin)
             controlButton = ControlButton(buttonX, buttonY, buttonRadius)
             
             initializeFood()
         }
         
         // Start game thread if not paused
-        if (!isGamePaused && thread == null) {
-            thread = GameThread(holder, this).apply {
-                setRunning(true)
-                start()
-            }
+        if (!isGamePaused) {
+            resumeGame()
         }
     }
 
@@ -152,7 +140,7 @@ class GameView @JvmOverloads constructor(
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
         Log.d(TAG, "Surface destroyed")
-        cleanupThread()
+        pauseGame()
     }
 
     override fun onDetachedFromWindow() {
@@ -165,12 +153,11 @@ class GameView @JvmOverloads constructor(
         var retry = true
         var attempts = 0
         
-        while (retry && attempts < 5) {  // Reduced max attempts and timeout
+        while (retry && attempts < 3) {  // Reduced max attempts
             try {
                 thread?.let { currentThread ->
                     currentThread.setRunning(false)
-                    currentThread.interrupt()  // Force interrupt the thread
-                    currentThread.join(25)  // Reduced timeout
+                    currentThread.join(100)  // Increased timeout slightly
                 }
                 retry = false
                 thread = null
@@ -184,27 +171,35 @@ class GameView @JvmOverloads constructor(
     fun cleanup() {
         Log.d(TAG, "Cleaning up GameView resources")
         try {
-            isGamePaused = true  // Prevent thread restart
+            isGamePaused = true
             cleanupThread()
-            try {
-                soundManager.release()
-            } catch (e: Exception) {
-                Log.e(TAG, "Error releasing sound manager: ${e.message}")
-            }
+            soundManager.release()
         } catch (e: Exception) {
             Log.e(TAG, "Error during cleanup: ${e.message}")
         }
     }
 
     fun update() {
-        snake.move()
-        checkCollisions()
-        
-        // Respawn food if there are too few
-        if (foodItems.size < FOOD_COUNT) {
-            val food = Food(width, height, SEGMENT_SIZE)
-            if (isValidFoodPosition(food)) {
-                foodItems.add(food)
+        // Only move and check collisions if not paused
+        if (!isGamePaused) {
+            // Store previous position to check if actually moved
+            val prevHead = snake.getSegments().firstOrNull()?.let { PointF(it.x, it.y) }
+            
+            snake.move()
+            
+            // Only check collisions if snake actually moved
+            val currentHead = snake.getSegments().firstOrNull()
+            if (prevHead != null && currentHead != null &&
+                (prevHead.x != currentHead.x || prevHead.y != currentHead.y)) {
+                checkCollisions()
+            }
+            
+            // Respawn food if there are too few
+            if (foodItems.size < FOOD_COUNT) {
+                val food = Food(width, height, SEGMENT_SIZE)
+                if (isValidFoodPosition(food)) {
+                    foodItems.add(food)
+                }
             }
         }
     }
@@ -241,16 +236,11 @@ class GameView @JvmOverloads constructor(
         foodItems.forEach { it.draw(canvas) }
         controlButton.draw(canvas)
         
-        // Draw score in top-right corner
-        canvas.drawText("Score: $score", width - 40f, 100f, scorePaint)
+        // Draw score in top-right corner with new text
+        canvas.drawText("当前积分: $score", width - 20f, 60f, scorePaint)
     }
 
     private fun checkCollisions() {
-        // Only check food collisions if snake is actually moving
-        if (!snake.hasMovedSinceLastCheck()) {
-            return
-        }
-        
         // Check food collisions
         val iterator = foodItems.iterator()
         while (iterator.hasNext()) {

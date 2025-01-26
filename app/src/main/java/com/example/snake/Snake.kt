@@ -47,6 +47,15 @@ class Snake(
         isAntiAlias = true
     }
 
+    private val namePaint = Paint().apply {
+        color = Color.WHITE
+        textSize = segmentSize * 0.6f
+        textAlign = Paint.Align.CENTER
+        isAntiAlias = true
+    }
+
+    private val playerName = "超级无敌小芒果"
+
     private var lastPosition = PointF(0f, 0f)
     private var hasMoved = false
 
@@ -208,7 +217,11 @@ class Snake(
         
         // Draw eyes on the head
         if (currentSegments.isNotEmpty()) {
-            drawEyes(canvas, currentSegments.first())
+            val head = currentSegments.first()
+            drawEyes(canvas, head)
+            
+            // Draw player name above the head
+            canvas.drawText(playerName, head.x, head.y - segmentSize, namePaint)
         }
     }
 

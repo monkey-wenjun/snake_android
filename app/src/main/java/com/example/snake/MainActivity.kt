@@ -44,7 +44,8 @@ class MainActivity : AppCompatActivity() {
                 or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                 or View.SYSTEM_UI_FLAG_FULLSCREEN)
 
-        gameView = GameView(this).also { setContentView(it) }
+        gameView = GameView(this)
+        setContentView(gameView)
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -79,10 +80,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        super.onDestroy()
         Log.d(TAG, "onDestroy")
         gameView?.cleanup()
         gameView = null
-        super.onDestroy()
     }
 
     override fun finish() {
