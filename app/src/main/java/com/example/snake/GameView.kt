@@ -233,9 +233,17 @@ class GameView @JvmOverloads constructor(
                 
                 // Only check collisions if snake actually moved
                 val currentHead = snake.getSegments().firstOrNull()
-                if (prevHead != null && currentHead != null &&
-                    (prevHead.x != currentHead.x || prevHead.y != currentHead.y)) {
-                    checkCollisions()
+                if (prevHead != null && currentHead != null) {
+                    val dx = prevHead.x - currentHead.x
+                    val dy = prevHead.y - currentHead.y
+                    val moved = (dx != 0f || dy != 0f)
+                    
+                    if (moved) {
+                        Log.d("SnakeGame", "蛇移动了！")
+                        checkCollisions()
+                    } else {
+                        Log.d("SnakeGame", "蛇没有移动")
+                    }
                 }
                 
                 // Respawn food if there are too few
@@ -249,7 +257,6 @@ class GameView @JvmOverloads constructor(
         } catch (e: Exception) {
             Log.e(TAG, "Error in update: ${e.message}")
             e.printStackTrace()
-            // Try to recover by pausing the game
             try {
                 pauseGame()
             } catch (e2: Exception) {
@@ -320,23 +327,19 @@ class GameView @JvmOverloads constructor(
         while (iterator.hasNext()) {
             val food = iterator.next()
             if (snake.checkFoodCollision(food)) {
-                // Add score first
-                score += when (food.character) {
+                val points = when (food.character) {
                     in 'A'..'Z' -> 30
                     in 'a'..'z' -> 20
                     in '0'..'9' -> 10
                     else -> 0
                 }
+                score += points
+                Log.d("SnakeGame", "吃到食物了！字符: ${food.character}, 得分: $points")
                 
-                // Then grow the snake
                 snake.grow()
-                
-                // Play sound only when actually colliding with food
                 soundManager.playSound(food.character)
-                
-                // Remove the food
                 iterator.remove()
-                break  // Only handle one collision per update
+                break
             }
         }
     }

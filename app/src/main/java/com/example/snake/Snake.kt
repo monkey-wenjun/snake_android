@@ -11,6 +11,7 @@ import kotlin.math.sqrt
 import kotlin.random.Random
 import java.util.Collections
 import java.util.concurrent.CopyOnWriteArrayList
+import android.util.Log
 
 class Snake(
     startX: Float,
@@ -23,6 +24,7 @@ class Snake(
     private var direction = Direction.RIGHT
     private var nextDirection = direction
     private val speed = segmentSize * 0.15f
+    private var isMoving = false
     private val color = Color.rgb(
         Random.nextInt(128, 256),
         Random.nextInt(128, 256),
@@ -72,11 +74,11 @@ class Snake(
 
     fun setDirection(newDirection: Direction?) {
         if (newDirection == null) {
-            // When direction is null, maintain current direction
-            nextDirection = direction
+            isMoving = false
             return
         }
         
+        isMoving = true
         when (newDirection) {
             Direction.UP -> if (direction != Direction.DOWN) nextDirection = newDirection
             Direction.DOWN -> if (direction != Direction.UP) nextDirection = newDirection
@@ -86,6 +88,11 @@ class Snake(
     }
 
     fun move() {
+        if (!isMoving) {
+            hasMoved = false
+            return
+        }
+
         direction = nextDirection
         val head = segments.first()
         val newHead = PointF(head.x, head.y)
@@ -245,7 +252,13 @@ class Snake(
         
         // Less strict collision detection
         val collisionThreshold = (segmentSize + food.size) * 0.5f
-        return distance < collisionThreshold
+        val collision = distance < collisionThreshold
+        
+        if (collision) {
+            Log.d("SnakeGame", "检测到碰撞！距离: ${"%.2f".format(distance)}, 阈值: ${"%.2f".format(collisionThreshold)}")
+        }
+        
+        return collision
     }
 
     fun getSegments(): List<PointF> = segments.toList() // Return a copy of the segments list
