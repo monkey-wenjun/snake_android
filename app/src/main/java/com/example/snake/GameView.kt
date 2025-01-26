@@ -56,12 +56,17 @@ class GameView @JvmOverloads constructor(
 
     fun resumeGame() {
         Log.d(TAG, "Resuming game")
-        if (holder.surface?.isValid == true) {
-            isGamePaused = false
-            thread = GameThread(holder, this).apply {
-                setRunning(true)
-                start()
-            }
+        if (!isGamePaused && holder.surface?.isValid == true) {
+            startNewThread()
+        }
+    }
+
+    private fun startNewThread() {
+        Log.d(TAG, "Starting new game thread")
+        cleanupThread()  // Ensure old thread is cleaned up
+        thread = GameThread(holder, this).apply {
+            setRunning(true)
+            start()
         }
     }
 
@@ -82,10 +87,8 @@ class GameView @JvmOverloads constructor(
             initializeFood()
         }
         
-        // Start game thread if not paused
-        if (!isGamePaused) {
-            resumeGame()
-        }
+        isGamePaused = false
+        startNewThread()
     }
 
     private fun initializeFood() {
@@ -150,20 +153,34 @@ class GameView @JvmOverloads constructor(
     }
 
     private fun cleanupThread() {
-        var retry = true
-        var attempts = 0
-        
-        while (retry && attempts < 3) {  // Reduced max attempts
+        Log.d(TAG, "Cleaning up game thread")
+        thread?.let { currentThread ->
             try {
-                thread?.let { currentThread ->
-                    currentThread.setRunning(false)
-                    currentThread.join(100)  // Increased timeout slightly
+                currentThread.setRunning(false)
+                currentThread.interrupt()
+                
+                // Wait for the thread to die with timeout
+                var retry = true
+                var timeoutCount = 0
+                while (retry && timeoutCount < 3) {
+                    try {
+                        currentThread.join(100)  // Wait up to 100ms
+                        retry = false
+                    } catch (e: InterruptedException) {
+                        timeoutCount++
+                    }
                 }
-                retry = false
-                thread = null
+                
+                // Log warning if cleanup timed out
+                if (retry) {
+                    Log.w(TAG, "Thread cleanup timed out")
+                } else {
+                    Log.d(TAG, "Thread cleanup completed successfully")
+                }
             } catch (e: Exception) {
-                Log.e(TAG, "Error cleaning up thread (attempt ${attempts + 1}): ${e.message}")
-                attempts++
+                Log.e(TAG, "Error cleaning up thread: ${e.message}")
+            } finally {
+                thread = null
             }
         }
     }
@@ -195,7 +212,7 @@ class GameView @JvmOverloads constructor(
             }
             
             // Respawn food if there are too few
-            if (foodItems.size < FOOD_COUNT) {
+            while (foodItems.size < FOOD_COUNT) {
                 val food = Food(width, height, SEGMENT_SIZE)
                 if (isValidFoodPosition(food)) {
                     foodItems.add(food)

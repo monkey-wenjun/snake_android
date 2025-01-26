@@ -50,6 +50,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
+        Log.d(TAG, "Window focus changed: $hasFocus")
         if (hasFocus) {
             // Re-hide system UI when focus is regained
             window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
@@ -58,30 +59,35 @@ class MainActivity : AppCompatActivity() {
                     or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
                     or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                     or View.SYSTEM_UI_FLAG_FULLSCREEN)
+        } else {
+            gameView?.pauseGame()
         }
     }
 
     override fun onPause() {
-        super.onPause()
         Log.d(TAG, "onPause")
+        super.onPause()
         gameView?.pauseGame()
     }
 
     override fun onResume() {
-        super.onResume()
         Log.d(TAG, "onResume")
-        gameView?.resumeGame()
+        super.onResume()
+        // Add a slight delay before resuming to ensure surface is ready
+        gameView?.postDelayed({
+            gameView?.resumeGame()
+        }, 100)
     }
 
     override fun onStop() {
-        super.onStop()
         Log.d(TAG, "onStop")
-        gameView?.cleanup()
+        super.onStop()
+        gameView?.pauseGame()
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         Log.d(TAG, "onDestroy")
+        super.onDestroy()
         gameView?.cleanup()
         gameView = null
     }
